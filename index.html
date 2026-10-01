@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Scheda personaggio</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#eef0f3;--card:#fff;--ink:#1c2330;--mute:#667085;--acc:#2f5d62;--line:#d9dee5;--soft:#f3f5f8}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#12161d;--card:#1a202a;--ink:#e8ecf2;--mute:#98a2b3;--acc:#7cc4c0;--line:#2a3340;--soft:#222a36}}
+:root[data-theme="dark"]{--bg:#12161d;--card:#1a202a;--ink:#e8ecf2;--mute:#98a2b3;--acc:#7cc4c0;--line:#2a3340;--soft:#222a36}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:860px;margin:0 auto;padding:16px}
+h1,h2,h3{font-family:"Iowan Old Style",Georgia,serif;margin:0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:12px}
+.mute{color:var(--mute)}
+#drop{border:2px dashed var(--line);border-radius:10px;padding:22px;text-align:center;margin:12px 0}
+#drop.on{border-color:var(--acc)}
+button,input[type=file]{font:inherit}
+button{background:var(--acc);color:var(--card);border:0;border-radius:6px;padding:8px 14px;cursor:pointer}
+button.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+#err{color:#c0392b}
+.top{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start}
+.top h2{font-size:30px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px;margin-top:14px}
+.stat{background:var(--soft);border-radius:8px;padding:8px;text-align:center}
+.stat b{display:block;font-size:22px;font-family:Georgia,serif}
+.abil{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:8px}
+.abil div{border:1px solid var(--line);border-radius:8px;padding:8px;text-align:center}
+.abil b{font-size:24px;display:block;font-family:Georgia,serif}
+.abil small{display:block}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:620px){.cols{grid-template-columns:1fr}}
+ul.l{list-style:none;margin:8px 0 0;padding:0}
+ul.l li{display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--line)}
+ul.l li.p b{color:var(--acc)}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;border:1px solid var(--acc);margin-right:6px}
+.dot.f{background:var(--acc)}.dot.h{background:linear-gradient(90deg,var(--acc) 50%,transparent 50%)}
+details{border-bottom:1px solid var(--line);padding:5px 0}
+summary{cursor:pointer;display:flex;justify-content:space-between;gap:8px}
+details .d{padding:6px 0 4px;color:var(--mute);font-size:14px}
+h3{font-size:18px;margin:14px 0 4px}
+h3:first-child{margin-top:0}
+.eq{color:var(--acc)}
+@media print{#loader,.noprint{display:none!important}body{background:#fff}.card{break-inside:avoid}}
+</style>
+</head>
+<body>
+<main>
+<section id="loader" class="card">
+<h1>Scheda personaggio</h1>
+<p class="mute">Carica il file JSON esportato da Foundry (clic destro sul personaggio → Esporta dati). Il file resta nel tuo browser: non viene inviato a nessuno.</p>
+<div id="drop">Trascina qui il file .json<br><br><input type="file" id="f" accept=".json,application/json"></div>
+<p id="err"></p>
+</section>
+<div id="sheet"></div>
+</main>
+<script>
+const AB=[["str","FOR"],["dex","DES"],["con","COS"],["int","INT"],["wis","SAG"],["cha","CAR"]];
+const SK={acr:["Acrobazia","dex"],ani:["Addestrare Animali","wis"],arc:["Arcano","int"],ath:["Atletica","str"],dec:["Inganno","cha"],his:["Storia","int"],ins:["Intuizione","wis"],itm:["Intimidire","cha"],inv:["Indagare","int"],med:["Medicina","wis"],nat:["Natura","int"],prc:["Percezione","wis"],prf:["Intrattenere","cha"],per:["Persuasione","cha"],rel:["Religione","int"],slt:["Rapidità di Mano","dex"],ste:["Furtività","dex"],sur:["Sopravvivenza","wis"]};
+const INV=["weapon","equipment","consumable","tool","loot","container"];
+const $=id=>document.getElementById(id);
+const mod=v=>Math.floor((v-10)/2);
+const sg=n=>(n>=0?"+":"")+n;
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function clean(html){
+  const t=String(html||"").replace(/@\w+\[[^\]]*\]\{([^}]*)\}/g,"$1").replace(/@\w+\[([^\]]*)\]/g,"$1").replace(/\[\[\/?\w+ ([^\]]*)\]\]/g,"$1");
+  const d=new DOMParser().parseFromString(t,"text/html");
+  d.querySelectorAll("script,style,iframe,object,embed,link,img,form").forEach(e=>e.remove());
+  d.querySelectorAll("*").forEach(e=>[...e.attributes].forEach(a=>{if(/^on/i.test(a.name)||/^(href|src|style)$/i.test(a.name))e.removeAttribute(a.name)}));
+  return d.body.innerHTML;
+}
+function item(i,extra){
+  const d=clean(i.system?.description?.value);
+  const q=i.system?.quantity>1?` ×${i.system.quantity}`:"";
+  const e=i.system?.equipped?` <span class="eq">●</span>`:"";
+  const head=`<span>${esc(i.name)}${q}${e}</span><span class="mute">${extra||""}</span>`;
+  return d?`<details><summary>${head}</summary><div class="d">${d}</div></details>`:`<details><summary>${head}</summary></details>`;
+}
+const LANG={abyssal:"Abissale",common:"Comune",draconic:"Draconico",elvish:"Elfico",sylvan:"Silvano",dwarvish:"Nanico",giant:"Gigante",gnomish:"Gnomesco",goblin:"Goblin",halfling:"Halfling",orc:"Orchesco",celestial:"Celestiale",deep:"Gergo delle profondità",infernal:"Infernale",primordial:"Primordiale",undercommon:"Sottocomune",cant:"Gergo ladresco"};
+const PROF={sim:"Armi semplici",mar:"Armi da guerra",lgt:"Armature leggere",med:"Armature medie",hvy:"Armature pesanti",shl:"Scudi"};
+const FT=[["class","Privilegi di classe"],["race","Tratti razziali"],["background","Background"],["feat","Talenti"]];
+const nice=k=>LANG[k]||PROF[k]||String(k).replace(/([a-z])([A-Z])/g,"$1 $2").replace(/^./,c=>c.toUpperCase());
+function calcAc(a,items,dex){
+  const s=a.system?.attributes?.ac||{};
+  if(s.calc==="flat"&&s.flat!=null)return[s.flat,false];
+  const eq=items.filter(i=>i.type==="equipment"&&i.system?.equipped);
+  const arm=eq.find(i=>["light","medium","heavy"].includes(i.system?.type?.value));
+  const sh=eq.find(i=>i.system?.type?.value==="shield");
+  let v=10+dex;
+  if(arm){const t=arm.system.type.value,b=arm.system.armor?.value??10,c=t==="heavy"?0:t==="medium"?(arm.system.armor?.dex??2):99;v=b+Math.min(dex,c)}
+  if(sh)v+=sh.system.armor?.value??2;
+  eq.forEach(i=>v+=+i.system.armor?.magicalBonus||0);
+  return[v,true];
+}
+function hpMax(a,cls,con){
+  const m=a.system?.attributes?.hp?.max;if(m)return m;
+  let t=0,ok=false;
+  cls.forEach(c=>{
+    const f=+String(c.system?.hd?.denomination||"d8").slice(1);
+    const adv=Object.values(c.system?.advancement||{}).find(x=>x.type==="HitPoints");if(!adv)return;ok=true;
+    for(let l=1;l<=(+c.system.levels||0);l++){const x=adv.value?.[l];t+=(x==="max"?f:(x==="avg"||x==null)?Math.floor(f/2)+1:+x)+con}
+  });
+  return ok?t:null;
+}
+function dmg(i){
+  const b=i.system?.damage?.base;if(!b||!b.denomination)return"";
+  return`${b.number||1}d${b.denomination}${b.bonus?" +"+b.bonus:""} ${(b.types||[]).join("/")}`.trim();
+}
+function render(a){
+  if(Array.isArray(a))a=a[0];
+  if(!a||!a.system||!a.name)throw new Error("Non sembra un actor di Foundry dnd5e: mancano 'name' o 'system'.");
+  const s=a.system,items=a.items||[],byId={};items.forEach(i=>byId[i._id]=i);
+  const cls=items.filter(i=>i.type==="class");
+  const level=cls.reduce((n,c)=>n+(+c.system?.levels||0),0)||+s.details?.level||1;
+  const prof=Math.floor((level-1)/4)+2;
+  const val=k=>+s.abilities?.[k]?.value||10;
+  const nm=t=>items.find(i=>i.type===t)?.name||"";
+  const race=nm("race"),bg=nm("background"),sub=nm("subclass");
+  const classes=cls.map(c=>`${c.name} ${c.system?.levels||""}`.trim()).join(" / ")+(sub?` (${sub})`:"");
+  const hp=s.attributes?.hp||{},hpm=hpMax(a,cls,mod(val("con")));
+  const[ac,est]=calcAc(a,items,mod(val("dex")));
+  const rm=items.find(i=>i.type==="race")?.system||{};
+  const mv=s.attributes?.movement||{};
+  const walk=mv.walk??rm.movement?.walk;
+  const speed=walk!=null?`${walk} ${mv.units||rm.movement?.units||"ft"}`:"—";
+  const sk=k=>{const o=s.skills?.[k]||{};return mod(val(o.ability||SK[k][1]))+Math.floor((+o.value||0)*prof)};
+  const dvis=s.attributes?.senses?.ranges?.darkvision??rm.senses?.ranges?.darkvision;
+  const cur=s.currency||{};
+  const money=["pp","gp","ep","sp","cp"].filter(k=>cur[k]).map(k=>`${cur[k]} ${k}`).join(", ")||"—";
+  let h=`<div class="card"><div class="top"><div><h2>${esc(a.name)}</h2><div class="mute">${esc([race,classes,bg].filter(Boolean).join(" · ")||"Personaggio")}</div></div>
+  <div class="noprint"><button class="ghost" onclick="window.print()">Stampa</button> <button class="ghost" onclick="reset()">Carica un altro</button></div></div>
+  <div class="stats"><div class="stat"><b>${level}</b>Livello</div><div class="stat"><b>${ac}${est?"~":""}</b>CA</div>
+  <div class="stat"><b>${hp.value??"—"}${hpm?`/${hpm}`:""}</b>PF${hp.temp?` (+${hp.temp})`:""}</div>
+  <div class="stat"><b>${sg(mod(val("dex")))}</b>Iniziativa</div><div class="stat"><b>${sg(prof)}</b>Competenza</div>
+  <div class="stat"><b>${esc(speed)}</b>Velocità</div><div class="stat"><b>${10+sk("prc")}</b>Perc. passiva</div></div></div>`;
+  h+=`<div class="card"><div class="abil">`+AB.map(([k,l])=>{const m=mod(val(k)),pr=s.abilities?.[k]?.proficient,sv=m+(pr?prof:0);return`<div><small class="mute">${l}</small><b>${sg(m)}</b><small>${val(k)}</small><small class="mute">TS ${sg(sv)}${pr?" ●":""}</small></div>`}).join("")+`</div></div>`;
+  h+=`<div class="cols"><div class="card"><h3>Abilità</h3><ul class="l">`+Object.entries(SK).map(([k,[n]])=>{
+    const v=+(s.skills?.[k]?.value)||0;
+    return`<li class="${v?"p":""}"><span><span class="dot ${v>=1?"f":v>0?"h":""}"></span>${n}</span><b>${sg(sk(k))}</b></li>`}).join("")+`</ul></div>`;
+  const tr=s.traits||{},d=s.details||{};
+  const langs=(tr.languages?.value||[]).map(nice).concat(tr.languages?.custom||[]).join(", ");
+  const profs=[...(tr.armorProf?.value||[]),...(tr.weaponProf?.value||[])].map(nice).join(", ");
+  const look=[["Genere",d.gender],["Età",d.age],["Altezza",d.height],["Peso",d.weight],["Occhi",d.eyes],["Pelle",d.skin],["Capelli",d.hair]].filter(x=>x[1]).map(x=>`${x[0]}: ${esc(x[1])}`).join(" · ");
+  h+=`<div class="card"><h3>Competenze e tratti</h3><p style="margin:6px 0"><b>Lingue:</b> ${esc(langs||"—")}</p><p style="margin:6px 0"><b>Armi e armature:</b> ${esc(profs||"—")}</p>${dvis?`<p style="margin:6px 0"><b>Scurovisione:</b> ${dvis} ft</p>`:""}${look?`<p class="mute" style="margin:6px 0">${look}</p>`:""}${d.xp?.value?`<p class="mute" style="margin:6px 0">PE: ${d.xp.value}</p>`:""}</div></div>`;
+  const feats=items.filter(i=>i.type==="feat");
+  if(feats.length){
+    const by={};feats.forEach(i=>{const t=i.system?.type?.value||"feat";(by[FT.some(f=>f[0]===t)?t:"feat"]??=[]).push(i)});
+    h+=`<div class="card"><h2 style="font-size:22px">Privilegi e talenti</h2>`+FT.filter(f=>by[f[0]]).map(f=>`<h3>${f[1]}</h3>`+by[f[0]].map(i=>item(i,esc(i.system?.requirements||""))).join("")).join("")+`</div>`;
+  }
+  const spells=items.filter(i=>i.type==="spell");
+  if(spells.length){
+    const sc=s.attributes?.spellcasting,m=sc?mod(val(sc)):null,by={};
+    spells.forEach(i=>(by[i.system?.level||0]??=[]).push(i));
+    const slots=Object.entries(s.spells||{}).filter(([k,v])=>/^spell\d$/.test(k)&&v.value).map(([k,v])=>`${k.slice(5)}°: ${v.value}`).join(" · ");
+    h+=`<div class="card"><h2 style="font-size:22px">Incantesimi</h2>${m!=null?`<p class="mute" style="margin:4px 0">CD ${8+prof+m} · Attacco ${sg(prof+m)}${slots?` · Slot disponibili — ${slots}`:""}</p>`:""}`+Object.keys(by).sort((x,y)=>x-y).map(l=>`<h3>${l==0?"Trucchetti":"Livello "+l}</h3>`+by[l].map(i=>item(i,i.system?.prepared?"preparato":"")).join("")).join("")+`</div>`;
+  }
+  const inv=items.filter(i=>INV.includes(i.type));
+  h+=`<div class="card"><h2 style="font-size:22px">Inventario</h2>${inv.length?inv.map(i=>{const c=byId[i.system?.container];return item(i,esc([dmg(i),c?"in "+c.name:""].filter(Boolean).join(" · ")))}).join(""):'<p class="mute">Vuoto.</p>'}<p class="mute" style="margin-bottom:0">Monete: ${money} &nbsp; <span class="eq">●</span> = equipaggiato</p></div>`;
+  const bio=clean(d.biography?.value);
+  if(bio)h+=`<div class="card"><h3>Biografia</h3><div class="d">${bio}</div></div>`;
+  if(est)h+=`<p class="mute" style="font-size:13px">~ CA stimata dall'armatura e dagli oggetti equipaggiati; effetti speciali non calcolati. PF massimi calcolati dai dadi vita del livello.</p>`;
+  $("sheet").innerHTML=h;$("loader").style.display="none";
+}
+function reset(){$("sheet").innerHTML="";$("loader").style.display="";$("f").value="";$("err").textContent=""}
+function readFile(file){
+  if(!file)return;
+  const r=new FileReader();
+  r.onload=()=>{try{render(JSON.parse(r.result));$("err").textContent=""}catch(e){$("err").textContent="Errore: "+e.message}};
+  r.readAsText(file);
+}
+$("f").onchange=e=>readFile(e.target.files[0]);
+const dz=$("drop");
+["dragover","dragenter"].forEach(t=>dz.addEventListener(t,e=>{e.preventDefault();dz.classList.add("on")}));
+["dragleave","drop"].forEach(t=>dz.addEventListener(t,e=>{e.preventDefault();dz.classList.remove("on")}));
+dz.addEventListener("drop",e=>readFile(e.dataTransfer.files[0]));
+</script>
+</body>
+</html>
